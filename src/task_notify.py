@@ -66,9 +66,7 @@ async def main(chat_id: int | None = None, manual: bool = False):
                 )
 
                 for client in clients:
-                    airport_by_code = await client.airport_by_code()  # cached
-                    if direction.src in airport_by_code and direction.dst in airport_by_code:
-                        to_fetch.append(FlightsFetcher.fetch_flights(direction, notifier, cache, client))
+                    to_fetch.append(FlightsFetcher.fetch_flights(direction, notifier, cache, client))
 
     results = await asyncio.gather(*to_fetch)
     results = [result for result in results if result is not None]

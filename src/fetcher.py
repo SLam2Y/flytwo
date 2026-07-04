@@ -33,7 +33,12 @@ class FlightsFetcher:
 
         if forward_value is None or backward_value is None:
             try:
-                logger.info('Fetching data from %s: %s -> %s', client.__class__.__name__, src, dst)
+                airport_by_code = await client.airport_by_code()  # cached
+                if src not in airport_by_code or dst not in airport_by_code:
+                    logger.info("Client %s doesn't support direction : %s -> %s", client_name, src, dst)
+                    return [], [], notifier
+
+                logger.info('Fetching data from %s: %s -> %s', client_name, src, dst)
 
                 forward, backward = await client.get_flights(
                     dep=src, arr=dst, dep_date=travel_date, arr_date=travel_date, currency='EUR'
