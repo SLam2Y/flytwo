@@ -32,12 +32,16 @@ class Settings(BaseSettings):
     MCP_HOST: str = '0.0.0.0'
     MCP_PORT: int = 8765
     MCP_PATH: str = '/mcp/'
+    # Hostnames allowed in the Host header (DNS-rebinding guard). Defaults to '*' (allow
+    # any) since the server only sits behind the trusted reverse proxy; narrow to specific
+    # domain(s) via the MCP_ALLOWED_HOSTS env var to re-enable the guard.
+    MCP_ALLOWED_HOSTS: list[str] = ['*']
 
-    @field_validator('CORS_ORIGINS', mode='before')
+    @field_validator('CORS_ORIGINS', 'MCP_ALLOWED_HOSTS', mode='before')
     @classmethod
     def parse_cors_origins(cls, v: str | list) -> list[str]:
         if isinstance(v, str):
-            return v.split(',')
+            return [item.strip() for item in v.split(',') if item.strip()]
         return v
 
 
@@ -69,3 +73,4 @@ MCP_API_BASE = _settings.MCP_API_BASE
 MCP_HOST = _settings.MCP_HOST
 MCP_PORT = _settings.MCP_PORT
 MCP_PATH = _settings.MCP_PATH
+MCP_ALLOWED_HOSTS = _settings.MCP_ALLOWED_HOSTS

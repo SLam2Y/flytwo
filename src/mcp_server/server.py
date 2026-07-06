@@ -27,7 +27,7 @@ from api.models import (
     SilentResponse,
     UserDirection,
 )
-from conf import MCP_API_BASE, MCP_HOST, MCP_PATH, MCP_PORT
+from conf import MCP_ALLOWED_HOSTS, MCP_API_BASE, MCP_HOST, MCP_PATH, MCP_PORT
 
 INSTRUCTIONS = """\
 Tools for the flytwo flight price tracker, mirroring its HTTP API.
@@ -245,7 +245,15 @@ async def list_promo(
 
 
 def main() -> None:
-    mcp.run(transport='http', host=MCP_HOST, port=MCP_PORT, path=MCP_PATH)
+    # localhost/127.0.0.1 are always allowed; MCP_ALLOWED_HOSTS adds the public
+    # domain(s) fronted by the reverse proxy so proxied requests don't get a 421.
+    mcp.run(
+        transport='http',
+        host=MCP_HOST,
+        port=MCP_PORT,
+        path=MCP_PATH,
+        allowed_hosts=MCP_ALLOWED_HOSTS or None,
+    )
 
 
 if __name__ == '__main__':
