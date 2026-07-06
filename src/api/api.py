@@ -280,7 +280,6 @@ async def convert(
     amount: int,
     from_currency: str,
     to_currency: str,
-    user: Annotated[User, Depends(auth.get_current_user)],
 ) -> ConvertResponse:
     if amount < 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Amount must be non-negative.')

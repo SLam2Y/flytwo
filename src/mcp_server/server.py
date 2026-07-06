@@ -32,7 +32,7 @@ from conf import MCP_ALLOWED_HOSTS, MCP_API_BASE, MCP_HOST, MCP_PATH, MCP_PORT
 INSTRUCTIONS = """\
 Tools for the flytwo flight price tracker, mirroring its HTTP API.
 
-Public tools need no auth: price_history, list_airports, list_currencies, get_link.
+Public tools need no auth: price_history, list_airports, list_currencies, get_link, convert_currency.
 All other tools act on a specific user and require a bearer token, either passed
 as the `token` argument or sent as an `Authorization: Bearer <jwt>` header.
 Airport codes are 3-letter IATA codes; dates are ISO `YYYY-MM-DD`.
@@ -115,6 +115,17 @@ async def get_link(
 ) -> LinkResponse:
     """Build booking links for a route on every airline that serves it."""
     return LinkResponse.model_validate(await _call('GET', f'/link/{src}/{dst}/{travel_date.isoformat()}'))
+
+
+@mcp.tool
+async def convert_currency(
+    amount: Annotated[int, Field(description='Non-negative amount to convert', ge=0)],
+    from_currency: Annotated[str, Field(description='Source currency code')],
+    to_currency: Annotated[str, Field(description='Target currency code')],
+) -> ConvertResponse:
+    """Convert an amount between two currencies."""
+    params = {'amount': amount, 'from_currency': from_currency, 'to_currency': to_currency}
+    return ConvertResponse.model_validate(await _call('GET', '/convert', params=params))
 
 
 # --- User tools (bearer token) ---------------------------------------------
@@ -218,18 +229,6 @@ async def set_currency(
     """Set the user's preferred currency (only allowed with no active directions)."""
     data = await _call('PUT', '/currency', token=token, auth=True, json={'currency': currency})
     return MessageResponse.model_validate(data)
-
-
-@mcp.tool
-async def convert_currency(
-    amount: Annotated[int, Field(description='Non-negative amount to convert', ge=0)],
-    from_currency: Annotated[str, Field(description='Source currency code')],
-    to_currency: Annotated[str, Field(description='Target currency code')],
-    token: str | None = None,
-) -> ConvertResponse:
-    """Convert an amount between two currencies."""
-    params = {'amount': amount, 'from_currency': from_currency, 'to_currency': to_currency}
-    return ConvertResponse.model_validate(await _call('GET', '/convert', token=token, auth=True, params=params))
 
 
 @mcp.tool
