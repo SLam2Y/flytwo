@@ -35,6 +35,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: flytwo:latest
     env_file: .env
     environment:
       DB_HOST: flytwo_postgres_1
@@ -48,6 +49,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - shared
+
+  mcp:
+    image: flytwo:latest
+    command: ["python", "-m", "mcp_server"]
+    env_file: .env
+    environment:
+      MCP_API_BASE: http://bot:8080
+    expose:
+      - "8765"
+    depends_on:
+      - bot
     networks:
       - shared
 

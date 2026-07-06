@@ -30,6 +30,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: flytwo:latest
     env_file: .env
     environment:
       DB_HOST: postgres
@@ -44,6 +45,17 @@ services:
       redis:
         condition: service_healthy
 
+  mcp:
+    image: flytwo:latest
+    command: ["python", "-m", "mcp_server"]
+    env_file: .env
+    environment:
+      MCP_API_BASE: http://bot:8080
+    expose:
+      - "8765"
+    depends_on:
+      - bot
+
   nginx:
     image: nginx:alpine
     restart: always
@@ -52,6 +64,7 @@ services:
       - "443:443"
     depends_on:
       - bot
+      - mcp
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro

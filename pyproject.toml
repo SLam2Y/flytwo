@@ -21,6 +21,8 @@ dependencies = [
     "pycountry",
     "matplotlib",
     "python-dateutil",
+    "fastmcp>=3.4.3",
+    "httpx>=0.28.1",
 ]
 
 [project.optional-dependencies]

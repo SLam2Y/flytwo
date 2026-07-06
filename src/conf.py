@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ['*']
     DEBUG: bool = False
 
+    # MCP server (HTTP proxy in front of the API)
+    MCP_API_BASE: str = 'http://bot:8080'  # internal URL of the FastAPI service
+    MCP_HOST: str = '0.0.0.0'
+    MCP_PORT: int = 8765
+    MCP_PATH: str = '/mcp/'
+
     @field_validator('CORS_ORIGINS', mode='before')
     @classmethod
     def parse_cors_origins(cls, v: str | list) -> list[str]:
@@ -58,3 +64,8 @@ JWT_ACCESS_TOKEN_EXPIRE = _settings.JWT_ACCESS_TOKEN_EXPIRE
 
 CORS_ORIGINS = _settings.CORS_ORIGINS
 DEBUG = _settings.DEBUG
+
+MCP_API_BASE = _settings.MCP_API_BASE
+MCP_HOST = _settings.MCP_HOST
+MCP_PORT = _settings.MCP_PORT
+MCP_PATH = _settings.MCP_PATH
