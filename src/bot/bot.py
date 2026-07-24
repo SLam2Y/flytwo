@@ -9,6 +9,7 @@ from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
 from aiogram.types import BufferedInputFile
 
+from bot.admin import maintainer_only
 from bot.notifier import TgBotNotifier
 from cache import redis_client
 from client import Airport, DestinationFare, FareStats
@@ -676,6 +677,41 @@ async def cmd_link(message: types.Message):
         await message.reply('No links found!')
     else:
         await message.reply('\n\n'.join(links))
+
+
+@router.message(Command(commands=['set']))
+@maintainer_only
+async def cmd_set(message: types.Message):
+    args = message.text.split()[1:]
+
+    if len(args) != 2:
+        await message.reply('Usage: /set <name> <value>')
+        return
+
+    name, value = args
+
+    await DataAccessLayer.set_setting(name, value)
+    await message.reply('Success!')
+
+
+@router.message(Command(commands=['get']))
+@maintainer_only
+async def cmd_get(message: types.Message):
+    args = message.text.split()[1:]
+
+    if len(args) != 1:
+        await message.reply('Usage: /get <name>')
+        return
+
+    name = args[0]
+
+    try:
+        value = await DataAccessLayer.get_setting(name)
+    except KeyError:
+        await message.reply('No setting found for %s', name)
+        return
+
+    await message.reply(value)
 
 
 dp.include_router(router)
