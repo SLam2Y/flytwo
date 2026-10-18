@@ -104,5 +104,8 @@ ignore = [
     "B904",   # Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"src/bot/texts.py" = ["RUF001"]
+
 [tool.ruff.format]
 quote-style = "single"

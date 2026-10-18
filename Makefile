@@ -14,8 +14,11 @@ set_hook:
 delete_hook:
 	curl --request POST --url 'https://api.telegram.org/bot${BOT_TOKEN}/deleteWebhook'
 
+set_profile:
+	PYTHONPATH=$(SRC_DIR) uv run python -c 'import asyncio; from bot.bot import setup_profile; asyncio.run(setup_profile())'
+
 test:
 	uv run pytest -n 1 tests
 
 # This is a phony target, meaning it doesn't represent a file
-.PHONY: migration migrate set_hook delete_hook test
+.PHONY: migration migrate set_hook delete_hook set_profile test

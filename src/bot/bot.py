@@ -5,15 +5,24 @@ from decimal import Decimal
 from random import randint
 
 import aiohttp
-from aiogram import Bot, Dispatcher, Router, types
+from aiogram import Bot, Dispatcher, F, Router, types
 from aiogram.filters import Command
-from aiogram.types import BufferedInputFile
+from aiogram.types import (
+    BotCommand,
+    BufferedInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    WebAppInfo,
+)
 
 from bot.admin import maintainer_only
 from bot.notifier import TgBotNotifier
+from bot.texts import BUTTON_ACTIONS, TEXTS, t
 from cache import redis_client
 from client import Airport, DestinationFare, FareStats
-from conf import API_URL, BOT_SECRET, BOT_TOKEN
+from conf import API_URL, BOT_SECRET, BOT_TOKEN, WEBAPP_URL
 from currency_converter import CurrencyConverter
 from dal import DataAccessLayer
 from dispatcher import dispatcher
@@ -27,59 +36,97 @@ dp = Dispatcher()
 router = Router()
 
 
+def _language_code(message: types.Message) -> str | None:
+    return message.from_user.language_code if message.from_user else None
+
+
+def main_keyboard(language_code: str | None) -> ReplyKeyboardMarkup:
+    labels = t('buttons', language_code)
+    rows = [['directions', 'go'], ['stats', 'promo'], ['info', 'help'], ['app', 'stop']]
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=labels[action]) for action in row] for row in rows],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+
+async def app_keyboard(message: types.Message) -> InlineKeyboardMarkup | None:
+    if message.chat.type != 'private':
+        return None
+
+    language_code = _language_code(message)
+    me = await message.bot.me()
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t('open_app', language_code), web_app=WebAppInfo(url=WEBAPP_URL))],
+            [
+                InlineKeyboardButton(
+                    text=t('home_screen', language_code), url=f'https://t.me/{me.username}?startapp=install'
+                )
+            ],
+        ]
+    )
+
+
 @router.message(Command(commands=['help']))
 async def cmd_help(message: types.Message):
-    help_text = (
-        'Here are the available commands:\n\n'
-        '/start - Start the bot.\n\n'
-        '/stop - Stop the bot.\n\n'
-        '/add <src> <dst> <travel_date> <price> OR /add <link> <price> - Add a travel direction.\n'
-        'Example: /add RMO EVN 15.10.2024 300\n'
-        'Note: src and dst should be 3-letter airport codes. The price must be a whole number of EUR.\n\n'
-        '/remove <src> <dst> OR /remove <link> - Remove a travel direction.\n'
-        'Example: /remove RMO EVN\n'
-        'Note: src and dst should be 3-letter airport codes.\n\n'
-        '/go - Manually launch the bot.\n\n'
-        '/schedule [pattern] - Toggle scheduling on/off, or set a check frequency.\n'
-        'Example: /schedule to toggle, or with a pattern:\n'
-        '  1h            every hour (default)\n'
-        '  Nh            every N hours\n'
-        '  6pm           daily at 6pm\n'
-        '  8am-11pm      every hour from 8am to 11pm\n'
-        '  8am-11pm 2h   every 2 hours from 8am to 11pm\n\n'
-        '/less - Toggles silence mode for the chat. If ON, messages will be sent only on changes.\n\n'
-        '/airports - lists all available airports by their codes.\n\n'
-        '/directions - lists all directions related to the chat.\n\n'
-        '/stats <src> <dst> [<date>] - draws the chart of price changes for certain direction.\n'
-        'Example: /stats RMO EVN 15.10.2024\n\n'
-        '/auth - returns chat id and one-time code for authorization in API.\n\n'
-        '/info - returns chat specific information.\n\n'
-        '/notify <src> <dst> [+|-] - Set notification preference for a direction.\n'
-        'Example: /notify RMO EVN -\n'
-        'Note: + for price increase only, - for price decrease only, omit for any change.\n\n'
-        '/threshold <src> <dst> <value> - Set minimum price change to trigger a notification.\n'
-        'Example: /threshold RMO EVN 20\n'
-        'Note: value must be a non-negative whole number of EUR. Default is 0 (notify on any change).\n\n'
-        '/convert <amount> <from> <to> - Convert an integer amount between currencies.\n'
-        'Example: /convert 100 EUR MDL\n\n'
-        '/currency <code> - Sets default currency for the chat.\n'
-        'Example: /currency MDL\n\n'
-        'Usage: /promo <src> <travel date> <price> - Finds cheap flights with only departure and date specified.\n'
-        'Example: /promo RMO 23.05.2026 150\n\n'
-        'Usage: /link <src> <dst> <travel date> - Find links for specified direction in supported airlines.\n'
-        'Example: /link RMO EVN 23.05.2026\n\n'
-    )
-    await message.reply(help_text)
+    await message.reply(t('help', _language_code(message)), reply_markup=await app_keyboard(message))
 
 
 @router.message(Command(commands=['start']))
 async def cmd_start(message: types.Message):
     _, created = await DataAccessLayer.create_chat(tg_id=message.chat.id)
+    language_code = _language_code(message)
 
-    if created:
-        await message.reply('Bot started! Use /help for more info.')
+    await message.reply(
+        t('start_created' if created else 'start_existing', language_code),
+        reply_markup=main_keyboard(language_code),
+    )
+
+    if inline_keyboard := await app_keyboard(message):
+        await message.answer(t('app_prompt', language_code), reply_markup=inline_keyboard)
+
+
+@router.message(F.text.in_(BUTTON_ACTIONS))
+async def on_keyboard_button(message: types.Message):
+    match BUTTON_ACTIONS[message.text]:
+        case 'directions':
+            await cmd_directions(message)
+        case 'go':
+            await cmd_go(message)
+        case 'info':
+            await cmd_info(message)
+        case 'help':
+            await cmd_help(message)
+        case 'app':
+            await message.reply(t('app_prompt', _language_code(message)), reply_markup=await app_keyboard(message))
+        case 'stop':
+            language_code = _language_code(message)
+            await message.reply(
+                t('stop_confirm', language_code),
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(text=t('stop_yes', language_code), callback_data='stop:yes'),
+                            InlineKeyboardButton(text=t('stop_no', language_code), callback_data='stop:no'),
+                        ]
+                    ]
+                ),
+            )
+        case action:
+            await message.reply(t(f'{action}_hint', _language_code(message)))
+
+
+@router.callback_query(F.data.in_({'stop:yes', 'stop:no'}))
+async def on_stop_confirm(callback: types.CallbackQuery):
+    if callback.data == 'stop:no':
+        text = t('stop_cancelled', callback.from_user.language_code)
     else:
-        await message.reply('Bot is already running! Use /help for more info.')
+        deleted = await DataAccessLayer.remove_chat(tg_id=callback.message.chat.id)
+        text = 'Bot stopped!' if deleted else 'Bot is already stopped.'
+
+    await callback.message.edit_text(text)
+    await callback.answer()
 
 
 @router.message(Command(commands=['stop']))
@@ -105,7 +152,7 @@ async def cmd_add(message: types.Message):
         command_parts = [command_parts[0], src, dst, travel_date_str, command_parts[2]]
 
     if len(command_parts) != 5:
-        await message.reply('Usage: /add <src> <dst> <travel_date> <price> OR /add <link> <price>')
+        await message.reply(t('add_hint', _language_code(message)))
         return
 
     _, src, dst, travel_date_str, price_str = command_parts
@@ -182,7 +229,7 @@ async def cmd_remove(message: types.Message):
         command_parts = [command_parts[0], src, dst]
 
     if len(command_parts) != 3:
-        await message.reply('Usage: /remove <src> <dst>')
+        await message.reply(t('remove_hint', _language_code(message)))
         return
 
     _, src, dst = command_parts
@@ -363,7 +410,7 @@ async def cmd_stats(message: types.Message):
             _, src, dst, dt = command_parts
 
         case _:
-            await message.reply('Usage: /stats <src> <dst> OR /stats <src> <dst> <date>')
+            await message.reply(t('stats_hint', _language_code(message)))
             return
 
     src = src.upper()
@@ -411,7 +458,7 @@ async def cmd_notify(message: types.Message):
     command_parts = message.text.split()
 
     if len(command_parts) not in (3, 4):
-        await message.reply('Usage: /notify <src> <dst> [+|-]')
+        await message.reply(t('notify_hint', _language_code(message)))
         return
 
     notify_on_decrease: bool | None = None
@@ -462,7 +509,7 @@ async def cmd_threshold(message: types.Message):
     command_parts = message.text.split()
 
     if len(command_parts) != 4:
-        await message.reply('Usage: /threshold <src> <dst> <value>')
+        await message.reply(t('threshold_hint', _language_code(message)))
         return
 
     _, src, dst, value_str = command_parts
@@ -504,7 +551,7 @@ async def cmd_convert(message: types.Message):
     args = message.text.split()[1:]
 
     if len(args) != 3:
-        await message.reply('Usage: /convert <amount> <from> <to>\nExample: /convert 100 EUR MDL')
+        await message.reply(t('convert_hint', _language_code(message)))
         return
 
     amount_str, from_cur, to_cur = args
@@ -534,7 +581,7 @@ async def cmd_currency(message: types.Message):
     args = message.text.split()[1:]
 
     if len(args) != 1:
-        await message.reply('Usage: /currency <currency>\nExample: /currency MDL')
+        await message.reply(t('currency_hint', _language_code(message)))
         return
 
     currency = args[0].upper()
@@ -569,7 +616,7 @@ async def cmd_promo(message: types.Message):
     args = message.text.split()[1:]
 
     if len(args) != 3:
-        await message.reply('Usage: /promo <src> <travel date> <price>\nExample: /promo RMO 23.05.2026 150')
+        await message.reply(t('promo_hint', _language_code(message)))
         return
 
     src, travel_date_str, price_str = args
@@ -647,7 +694,7 @@ async def cmd_link(message: types.Message):
     args = message.text.split()[1:]
 
     if len(args) != 3:
-        await message.reply('Usage: /link <src> <dst> <travel date>\nExample: /link RMO EVN 23.05.2026')
+        await message.reply(t('link_hint', _language_code(message)))
         return
 
     src, dst, travel_date_str = args
@@ -717,7 +764,19 @@ async def cmd_get(message: types.Message):
 dp.include_router(router)
 
 
+async def setup_profile():
+    for code, texts in TEXTS.items():
+        language_code = None if code == 'en' else code
+        await bot.set_my_commands(
+            [BotCommand(command=command, description=text) for command, text in texts['commands'].items()],
+            language_code=language_code,
+        )
+        await bot.set_my_description(texts['description'], language_code=language_code)
+        await bot.set_my_short_description(texts['short_description'], language_code=language_code)
+
+
 async def main():
+    await setup_profile()
     await dp.start_polling(bot)
 
 

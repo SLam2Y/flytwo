@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     API_URL: str | None = None
     BOT_SECRET: str | None = None
     TG_SECRET: str | None = None
+    WEBAPP_URL: str = 'https://blueflyingpanda.github.io/fly2/'
 
     DB_USER: str | None = None
     DB_PASS: str | None = None
@@ -51,6 +52,7 @@ BOT_TOKEN = _settings.BOT_TOKEN
 API_URL = _settings.API_URL
 BOT_SECRET = _settings.BOT_SECRET
 TG_SECRET = _settings.TG_SECRET
+WEBAPP_URL = _settings.WEBAPP_URL
 
 DB_USER = _settings.DB_USER
 DB_PASS = _settings.DB_PASS
